@@ -133,12 +133,12 @@ public class TflPollingService {
             // 2. FCM Task (parallelizing individual sends if many)
             CompletableFuture<Integer> fcmTask = CompletableFuture.supplyAsync(() -> {
                 // Use parallelStream to send FCM messages in parallel
-                return (int) groupedPredictions.entrySet().parallelStream()
-                        .map(entry -> {
-                            fcmService.publishToTopic(entry.getKey(), entry.getValue());
-                            return 1;
-                        })
-                        .count();
+                // We use forEach to force execution of side effects (publishToTopic)
+                // because .count() might skip .map() in Java 9+ for sized sources.
+                groupedPredictions.entrySet().parallelStream().forEach(entry -> {
+                    fcmService.publishToTopic(entry.getKey(), entry.getValue());
+                });
+                return groupedPredictions.size();
             });
 
             // Wait for both to complete
