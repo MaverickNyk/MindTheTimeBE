@@ -14,6 +14,9 @@ import java.io.ByteArrayInputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 @Service
 @Slf4j
@@ -107,6 +110,51 @@ public class FcmService {
             log.error("Failed to send FCM message to topic: {}", topic, e);
         } catch (Exception e) {
             log.error("Error preparing FCM message for topic: {}", topic, e);
+        }
+    }
+
+    /**
+     * Publish multiple messages to FCM topics in batch
+     * 
+     * @param topicPayloads Map of topic name to payload object
+     */
+    public void publishAll(Map<String, Object> topicPayloads) {
+        if (!fcmEnabled || topicPayloads == null || topicPayloads.isEmpty()) {
+            return;
+        }
+
+        List<Message> messages = new ArrayList<>();
+        for (Map.Entry<String, Object> entry : topicPayloads.entrySet()) {
+            try {
+                String jsonPayload = objectMapper.writeValueAsString(entry.getValue());
+                messages.add(Message.builder()
+                        .setTopic(entry.getKey())
+                        .putData("payload", jsonPayload)
+                        .build());
+            } catch (Exception e) {
+                log.error("Error preparing FCM message for topic: {}", entry.getKey(), e);
+            }
+        }
+
+        log.info("🚀 Sending {} FCM messages in batch...", messages.size());
+
+        // Chunk messages to 500 (Firebase Admin SDK limit for sendEach)
+        for (int i = 0; i < messages.size(); i += 500) {
+            List<Message> chunk = messages.subList(i, Math.min(i + 500, messages.size()));
+            try {
+                BatchResponse response = FirebaseMessaging.getInstance().sendEach(chunk);
+                log.info("✅ Batch sent {} messages. Success: {}, Failure: {}",
+                        chunk.size(), response.getSuccessCount(), response.getFailureCount());
+
+                if (response.getFailureCount() > 0) {
+                    response.getResponses().stream()
+                            .filter(res -> !res.isSuccessful())
+                            .limit(5)
+                            .forEach(res -> log.error("FCM Batch Error: {}", res.getException().getMessage()));
+                }
+            } catch (FirebaseMessagingException e) {
+                log.error("❌ Failed to send FCM batch", e);
+            }
         }
     }
 }

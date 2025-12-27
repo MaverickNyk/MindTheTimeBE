@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -54,19 +54,24 @@ public class TflPollingService {
     public List<RefreshSummary> refreshAll() {
         String timestamp = LocalDateTime.now().format(TIME_FORMATTER);
         long startMillis = System.currentTimeMillis();
-        List<RefreshSummary> summaries = new ArrayList<>();
 
         log.info("═══════════════════════════════════════════════════════════════════");
         log.info("🚇 TFL REFRESH STARTED | Modes: {} | Time: {}", tflTransportModes.toUpperCase(), timestamp);
         log.info("═══════════════════════════════════════════════════════════════════");
 
         String[] modes = tflTransportModes.split(",");
-        for (String mode : modes) {
-            String trimmedMode = mode.trim();
-            if (!trimmedMode.isEmpty()) {
-                summaries.add(refreshMode(trimmedMode));
-            }
-        }
+
+        // Process all modes in parallel
+        List<CompletableFuture<RefreshSummary>> futures = Arrays.stream(modes)
+                .map(String::trim)
+                .filter(mode -> !mode.isEmpty())
+                .map(mode -> CompletableFuture.supplyAsync(() -> refreshMode(mode)))
+                .collect(Collectors.toList());
+
+        // Wait for all modes to complete and gather summaries
+        List<RefreshSummary> summaries = futures.stream()
+                .map(CompletableFuture::join)
+                .collect(Collectors.toList());
 
         long totalDuration = System.currentTimeMillis() - startMillis;
         log.info("═══════════════════════════════════════════════════════════════════");
@@ -130,14 +135,10 @@ public class TflPollingService {
                 redisService.saveAll(redisData, redisTtl);
             });
 
-            // 2. FCM Task (parallelizing individual sends if many)
+            // 2. FCM Task (Batch publishing)
             CompletableFuture<Integer> fcmTask = CompletableFuture.supplyAsync(() -> {
-                // Use parallelStream to send FCM messages in parallel
-                // We use forEach to force execution of side effects (publishToTopic)
-                // because .count() might skip .map() in Java 9+ for sized sources.
-                groupedPredictions.entrySet().parallelStream().forEach(entry -> {
-                    fcmService.publishToTopic(entry.getKey(), entry.getValue());
-                });
+                Map<String, Object> fcmData = new HashMap<>(groupedPredictions);
+                fcmService.publishAll(fcmData);
                 return groupedPredictions.size();
             });
 
