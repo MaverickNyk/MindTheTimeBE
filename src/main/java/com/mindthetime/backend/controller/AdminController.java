@@ -1,7 +1,9 @@
 package com.mindthetime.backend.controller;
 
 import com.mindthetime.backend.model.RefreshSummary;
+import com.mindthetime.backend.model.LineStatusResponse;
 import com.mindthetime.backend.service.FcmService;
+import com.mindthetime.backend.service.LineStatusService;
 import com.mindthetime.backend.service.RedisService;
 import com.mindthetime.backend.service.TflPollingService;
 import lombok.RequiredArgsConstructor;
@@ -23,12 +25,20 @@ public class AdminController {
     private final RedisService redisService;
     private final FcmService fcmService;
     private final TflPollingService tflPollingService;
+    private final LineStatusService lineStatusService;
 
     @GetMapping("/refresh")
     public ResponseEntity<List<RefreshSummary>> refresh() {
         log.info("🔄 ADMIN: Manual refresh triggered for all configured modes");
         List<RefreshSummary> summaries = tflPollingService.refreshAll();
         return ResponseEntity.ok(summaries);
+    }
+
+    @GetMapping("/status/refresh")
+    public ResponseEntity<List<LineStatusResponse>> refreshLineStatuses() {
+        log.info("🔄 ADMIN: Manual line status refresh triggered");
+        List<LineStatusResponse> statuses = lineStatusService.pollLineStatuses();
+        return ResponseEntity.ok(statuses);
     }
 
     @GetMapping("/cleanup")

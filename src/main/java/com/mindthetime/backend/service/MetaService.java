@@ -28,8 +28,7 @@ public class MetaService {
 
     // Exemption list for modes that are TflService but we don't want to show
     private static final Set<String> EXEMPT_MODES = Set.of(
-            "national-rail", "tram", "river-bus", "cable-car", "river-tour", "cycle-hire", "replacement-bus",
-            "river-tour");
+            "national-rail", "tram", "river-bus", "cable-car", "river-tour", "cycle-hire", "replacement-bus");
 
     // Display name mapping
     private static final Map<String, String> DISPLAY_NAME_MAP = Map.of(
@@ -146,13 +145,18 @@ public class MetaService {
         List<Map<String, Object>> rawSections = (List<Map<String, Object>>) rawRoute.get("routeSections");
 
         // Group destinations by direction and ensure uniqueness
-        Map<String, Set<String>> groupedDirections = new HashMap<>();
+        Map<String, Set<LineRouteResponse.Destination>> groupedDirections = new HashMap<>();
         if (rawSections != null) {
             for (Map<String, Object> section : rawSections) {
                 String direction = (String) section.get("direction");
-                String destination = (String) section.get("destinationName");
-                if (direction != null && destination != null) {
-                    groupedDirections.computeIfAbsent(direction, k -> new LinkedHashSet<>()).add(destination);
+                String destinationName = (String) section.get("destinationName");
+                String destinationId = (String) section.get("destination");
+                if (direction != null && destinationName != null && destinationId != null) {
+                    groupedDirections.computeIfAbsent(direction, k -> new LinkedHashSet<>())
+                            .add(LineRouteResponse.Destination.builder()
+                                    .id(destinationId)
+                                    .name(destinationName)
+                                    .build());
                 }
             }
         }

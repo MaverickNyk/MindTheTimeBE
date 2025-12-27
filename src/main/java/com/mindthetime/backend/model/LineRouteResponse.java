@@ -21,8 +21,17 @@ public class LineRouteResponse {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
+    public static class Destination {
+        private String id;
+        private String name;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class DirectionInfo {
         private String direction; // e.g. inbound, outbound
-        private List<String> destinations; // e.g. ["Upminster Underground Station", ...]
+        private List<Destination> destinations;
     }
 }
