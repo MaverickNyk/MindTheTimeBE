@@ -8,6 +8,7 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestStreamHandler;
 import com.mindthetime.backend.config.ApplicationContextHolder;
 import com.mindthetime.backend.service.TflPollingService;
+import com.mindthetime.backend.service.LineStatusService;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -40,7 +41,11 @@ public class StreamLambdaHandler implements RequestStreamHandler {
             try {
                 TflPollingService pollingService = ApplicationContextHolder.getBean(TflPollingService.class);
                 pollingService.refreshAll();
-                context.getLogger().log("✅ Scheduled refresh completed successfully.");
+
+                LineStatusService lineStatusService = ApplicationContextHolder.getBean(LineStatusService.class);
+                lineStatusService.pollLineStatuses();
+
+                context.getLogger().log("✅ Scheduled refresh (Predictions & Line Status) completed successfully.");
                 return;
             } catch (Exception e) {
                 context.getLogger().log("❌ Error during scheduled refresh: " + e.getMessage());

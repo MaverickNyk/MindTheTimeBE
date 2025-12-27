@@ -26,6 +26,9 @@ public class FcmService {
     @Value("${fcm.service-account-json}")
     private String serviceAccountJson;
 
+    @Value("${firebase.database-url:}")
+    private String databaseUrl;
+
     private final ObjectMapper objectMapper;
     private boolean fcmEnabled = false;
 
@@ -42,6 +45,7 @@ public class FcmService {
                         serviceAccountJson.getBytes(StandardCharsets.UTF_8));
                 FirebaseOptions options = FirebaseOptions.builder()
                         .setCredentials(GoogleCredentials.fromStream(serviceAccount))
+                        .setDatabaseUrl(databaseUrl)
                         .build();
 
                 if (FirebaseApp.getApps().isEmpty()) {
@@ -67,6 +71,7 @@ public class FcmService {
             FileInputStream serviceAccount = new FileInputStream(serviceAccountPath);
             FirebaseOptions options = FirebaseOptions.builder()
                     .setCredentials(GoogleCredentials.fromStream(serviceAccount))
+                    .setDatabaseUrl(databaseUrl)
                     .build();
 
             if (FirebaseApp.getApps().isEmpty()) {
