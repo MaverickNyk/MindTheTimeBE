@@ -14,8 +14,10 @@ import java.io.ByteArrayInputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 @Service
@@ -135,37 +137,69 @@ public class FcmService {
             return;
         }
 
-        log.info("🚀 Sending {} FCM messages in parallel using FixedThreadPool...", topicPayloads.size());
-
+        log.info("🚀 Preparing to send {} FCM topic updates...", topicPayloads.size());
         long start = System.currentTimeMillis();
 
-        // Use a high-concurrency pool for blocking I/O operations like network calls.
-        // Since we are on a stronger server, we can afford a larger pool.
-        var executor = java.util.concurrent.Executors.newFixedThreadPool(100);
         try {
-            List<CompletableFuture<Boolean>> futures = topicPayloads.entrySet().stream()
-                    .map(entry -> CompletableFuture.supplyAsync(() -> {
+            List<com.google.firebase.messaging.Message> messages = topicPayloads.entrySet().stream()
+                    .map(entry -> {
                         try {
-                            publishToTopic(entry.getKey(), entry.getValue());
-                            return true;
+                            String jsonPayload = objectMapper.writeValueAsString(entry.getValue());
+                            return com.google.firebase.messaging.Message.builder()
+                                    .setTopic(entry.getKey())
+                                    .putData("payload", jsonPayload)
+                                    .build();
                         } catch (Exception e) {
-                            log.error("❌ Failed to send individual FCM message for topic: {}", entry.getKey(), e);
-                            return false;
+                            log.error("❌ Error creating FCM message for topic: {}", entry.getKey(), e);
+                            return null;
                         }
-                    }, executor))
+                    })
+                    .filter(Objects::nonNull)
                     .toList();
 
-            // Wait for all to complete
-            long successCount = futures.stream()
-                    .map(CompletableFuture::join)
-                    .filter(success -> success)
-                    .count();
+            // Firebase Limit: sendEachAsync supports many messages, but it's good to batch
+            // them
+            // into chunks of 500 for optimal processing and to stay under concurrent fanout
+            // limits.
+            int batchSize = 500;
+            List<List<com.google.firebase.messaging.Message>> batches = new ArrayList<>();
+            for (int i = 0; i < messages.size(); i += batchSize) {
+                batches.add(messages.subList(i, Math.min(i + batchSize, messages.size())));
+            }
 
-            long duration = System.currentTimeMillis() - start;
-            log.info("✅ Finished sending FCM messages. Total: {}, Success: {}, Time: {}ms",
-                    topicPayloads.size(), successCount, duration);
-        } finally {
-            executor.shutdown();
+            log.info("📦 Partitioned into {} batches of up to {}.", batches.size(), batchSize);
+
+            // Send batches in parallel using standard thread pool (since we are on Java 17)
+            var executor = java.util.concurrent.Executors.newFixedThreadPool(10);
+            try {
+                List<CompletableFuture<com.google.firebase.messaging.BatchResponse>> batchFutures = batches.stream()
+                        .map(batch -> CompletableFuture.supplyAsync(() -> {
+                            try {
+                                return FirebaseMessaging.getInstance().sendEach(batch);
+                            } catch (Exception e) {
+                                log.error("❌ Batch send failed", e);
+                                return null;
+                            }
+                        }, executor))
+                        .toList();
+
+                long successCount = 0;
+                for (CompletableFuture<com.google.firebase.messaging.BatchResponse> future : batchFutures) {
+                    com.google.firebase.messaging.BatchResponse response = future.join();
+                    if (response != null) {
+                        successCount += response.getSuccessCount();
+                    }
+                }
+
+                long duration = System.currentTimeMillis() - start;
+                log.info("✅ Finished sending FCM messages. Total: {}, Success: {}, Time: {}ms",
+                        topicPayloads.size(), successCount, duration);
+            } finally {
+                executor.shutdown();
+            }
+
+        } catch (Exception e) {
+            log.error("❌ Critical error during FCM publishing", e);
         }
     }
 
