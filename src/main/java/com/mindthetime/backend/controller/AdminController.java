@@ -16,10 +16,15 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.Set;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+
 @RestController
 @RequestMapping("/api/v1/admin")
 @RequiredArgsConstructor
 @Slf4j
+@Tag(name = "Admin", description = "Administrative operations for manual data refreshing and cleanup")
 public class AdminController {
 
     private final RedisService redisService;
@@ -27,13 +32,17 @@ public class AdminController {
     private final TflPollingService tflPollingService;
     private final LineStatusService lineStatusService;
 
+    @Operation(summary = "Trigger Manual Refresh", description = "Manually triggers a data refresh for all configured transport modes from TFL API.")
+    @ApiResponse(responseCode = "200", description = "Refresh completed successfully")
     @GetMapping("/refresh")
     public ResponseEntity<List<RefreshSummary>> refresh() {
-        log.info("🔄 ADMIN: Manual refresh triggered for all configured modes");
+        log.info("🔄 ADMIN: Manual refresh triggerred for all configured modes");
         List<RefreshSummary> summaries = tflPollingService.refreshAll();
         return ResponseEntity.ok(summaries);
     }
 
+    @Operation(summary = "Trigger Line Status Refresh", description = "Manually triggers a refresh of line statuses from TFL API.")
+    @ApiResponse(responseCode = "200", description = "Line statuses refreshed successfully")
     @GetMapping("/status/refresh")
     public ResponseEntity<List<LineStatusResponse>> refreshLineStatuses() {
         log.info("🔄 ADMIN: Manual line status refresh triggered");
@@ -41,6 +50,8 @@ public class AdminController {
         return ResponseEntity.ok(statuses);
     }
 
+    @Operation(summary = "System Cleanup", description = "Clears all data from Redis and sends a 'CLEAR' signal to FCM topics to reset client state.")
+    @ApiResponse(responseCode = "200", description = "Cleanup completed")
     @GetMapping("/cleanup")
     public ResponseEntity<String> cleanup() {
         log.info("🔥 ADMIN: Cleanup requested. Clearing Redis and signaling FCM...");

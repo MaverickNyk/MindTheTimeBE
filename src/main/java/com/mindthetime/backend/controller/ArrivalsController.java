@@ -10,9 +10,17 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+
 @RestController
 @RequestMapping("/api/v1/predictions")
 @RequiredArgsConstructor
+@Tag(name = "Predictions", description = "TFL Arrival Predictions")
 public class ArrivalsController {
 
     private final CacheRetrievalService cacheRetrievalService;
@@ -28,11 +36,14 @@ public class ArrivalsController {
      *                  "inbound,outbound")
      * @return List of Station objects with nested line and direction data
      */
+    @Operation(summary = "Get Arrival Predictions", description = "Retrieves arrival predictions for specified stations, modes, and directions from the Redis cache.")
+    @ApiResponse(responseCode = "200", description = "Successful retrieval", content = @Content(mediaType = "application/json", schema = @Schema(implementation = Station.class)))
+    @ApiResponse(responseCode = "404", description = "Cache Miss - Data not yet available", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResponse.class)))
     @GetMapping
     public ResponseEntity<?> getPredictions(
-            @RequestParam(required = true) String station,
-            @RequestParam(required = true) String mode,
-            @RequestParam(required = true) String direction) {
+            @Parameter(description = "Comma-separated station IDs (e.g. 940GZZLUKSX)", required = true) @RequestParam(required = true) String station,
+            @Parameter(description = "Comma-separated transport modes or line IDs (e.g. northern,victoria)", required = true) @RequestParam(required = true) String mode,
+            @Parameter(description = "Comma-separated directions (inbound,outbound)", required = true) @RequestParam(required = true) String direction) {
 
         // Retrieve from cache and structure as Station objects
         List<Station> stations = cacheRetrievalService.getStations(station, mode, direction);
